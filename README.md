@@ -1,5 +1,5 @@
 # blowsuck
-Blow / suck (wireless breath controller)
+Wireless breath controller
 
 - using esp32 (node 32s)
 - pressure sensor i2c (24bit) = cfsensor XGZP6897D
@@ -7,6 +7,8 @@ Blow / suck (wireless breath controller)
 - runs on battery
 - pd act as a udp server and relay to osc or midi
 - web interface to configure ssid + udp server / port
+
+![image](https://user-images.githubusercontent.com/441764/152018330-60fa6280-8540-4b97-8292-34e2692896ad.png)
 
 ![photo1643218006](https://user-images.githubusercontent.com/441764/152017938-cecceb2d-7439-45f2-8e83-aee7932defc1.jpeg)
 
