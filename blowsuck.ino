@@ -313,11 +313,11 @@ void createWebServer()
     server.on("/", []() {
       IPAddress ip = WiFi.softAPIP();
       String ipStr = String(ip[0]) + '.' + String(ip[1]) + '.' + String(ip[2]) + '.' + String(ip[3]);
-      content = "<!DOCTYPE HTML>\r\n<html><h1>Blow / Suck Wifi Credentials Update page</h1>";
+      content = "<!DOCTYPE HTML>\r\n<html><h1>Blow / Suck</h1>";
       content += "<form action=\"/scan\" method=\"POST\"><input type=\"submit\" value=\"scan\"></form>";
       content += "<p>";
       content += st;
-      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><label>UDP server IP / PORT:</label><input required placeholder='udp server ip' name='udpserverip' length=32><input placeholder='udp server port' name='udpserverport' required value='3333' length=4><br /><br /><input type='submit'></form>";
+      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><label>UDP server IP / PORT: </label><input required placeholder='udp server ip' name='udpserverip' length=32><input placeholder='udp server port' name='udpserverport' required value='3333' length=4><br /><br /><input type='submit'></form>";
       content += "</html>";
       server.send(200, "text/html", content);
     });
