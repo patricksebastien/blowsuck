@@ -10,6 +10,8 @@
 
 bool debugSerial = false;
 const long period=5; //time between samples in milliseconds
+#define LED_BUILTIN 19
+
 
 // launch webserver and udp
 WiFiUDP udp;
@@ -38,7 +40,7 @@ bool readCFSensor(byte sensorAddress);
 void setup() {
   btStop();
   if(debugSerial) {
-    Serial.begin(115200);                     //begin serial port
+    Serial.begin(9600);                     //begin serial port
   }
   Wire.begin();                           //begin i2c bus
   WiFi.disconnect();
@@ -136,7 +138,7 @@ bool readCFSensor(byte sensorAddress) {
 
   Wire.beginTransmission(sensorAddress);    //send Start and sensor address
   Wire.write(0x30);                         //send 0x30 register address
-  Wire.write(0x01);                         //set and start (0X0A = temperature + pressure, 0x01 just pressure)
+  Wire.write(0x0A);                         //set and start (0X0A = temperature + pressure, 0x01 just pressure)
   Wire.endTransmission();                   //send Stop
 
   byte reg0x30 = 0x30;                      //declare byte variable for 0x30 register copy (0x08 initializing for while enter)
@@ -313,11 +315,11 @@ void createWebServer()
     server.on("/", []() {
       IPAddress ip = WiFi.softAPIP();
       String ipStr = String(ip[0]) + '.' + String(ip[1]) + '.' + String(ip[2]) + '.' + String(ip[3]);
-      content = "<!DOCTYPE HTML>\r\n<html><h1>Blow / Suck</h1>";
+      content = "<!DOCTYPE HTML>\r\n<html><h1>Blow / Suck Wifi Credentials Update page</h1>";
       content += "<form action=\"/scan\" method=\"POST\"><input type=\"submit\" value=\"scan\"></form>";
       content += "<p>";
       content += st;
-      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><label>UDP server IP / PORT: </label><input required placeholder='udp server ip' name='udpserverip' length=32><input placeholder='udp server port' name='udpserverport' required value='3333' length=4><br /><br /><input type='submit'></form>";
+      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><label>UDP server IP / PORT:</label><input required placeholder='udp server ip' name='udpserverip' length=32><input placeholder='udp server port' name='udpserverport' required value='3333' length=4><br /><br /><input type='submit'></form>";
       content += "</html>";
       server.send(200, "text/html", content);
     });
