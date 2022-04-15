@@ -45,6 +45,15 @@ void setup() {
   Wire.begin();                           //begin i2c bus
   WiFi.disconnect();
   EEPROM.begin(512); //Initialasing EEPROM
+
+  /* 
+  // CLEAR EEPROM to reset wifi credentials
+  // AP will start (blowsuckAP), visit: http://192.168.4.1
+  for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
+  }
+  */
+
   delay(10);
   pinMode(0, INPUT);
   for (int i = 0; i < 32; ++i)
