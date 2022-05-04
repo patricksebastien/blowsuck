@@ -1,7 +1,7 @@
 // HARDWARE REQUIREMENTS
 // ==================
 // Example for ESP32 sending OSC midi to TouchOSC -> Virtual Midi -> DAW
-//TODO split sensor 2 cc
+//TODO add Bonjour (mDNS)
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -226,42 +226,46 @@ bool readCFSensor(byte sensorAddress) {
     press = float(pressure24bit) * 0.0000078125;                        //KPa positive pressure calculation
   }
 
-
   if(!(press >= 65.53) && (press >= 0.48 || press <= 0.34)) { // no calibration, just by observation when not touching the sensor
     
     if(press <= 0.34) { //weird when going full blast it jumps to 65.54 (from -)
         ccSuck = map(press, -65.53, 0.34, 0, 127);
-
+        //todo add filter?
+        //ccmap = map(ema_filter(pressmap, ptr), 0, 131.08, 0, 127);
+        //don't send if last value
         if (debugSerial) {
           Serial.print(ccSuck);
           Serial.println("suck");
         }
 
         uint8_t midi[4];
-        midi[0] = ccSuck;
-        midi[1] = 11;
-        midi[2] = 176;
-        midi[3] = 0;
+        midi[0] = 0;
+        midi[1] = ccSuck;
+        midi[2] = 11;  // expression
+        midi[3] = 176;
         oscUdp.sendMessage("/midi",  "m",  midi);
         
     } else if(press >= 0.48) {
         ccBlow = map(press, 0.48, 65.53, 0, 127);
-
+        //todo add filter?
+        //ccmap = map(ema_filter(pressmap, ptr), 0, 131.08, 0, 127);
+        //don't send if last value
         if (debugSerial) {
           Serial.print(ccBlow);
           Serial.println("blow");
         }
 
         uint8_t midi[4];
-        midi[0] = ccBlow;
-        midi[1] = 7;
-        midi[2] = 176;
-        midi[3] = 0;
+        midi[0] = 0;
+        midi[1] = ccBlow;
+        midi[2] = 2; // breath controller
+        midi[3] = 176;
         oscUdp.sendMessage("/midi",  "m",  midi);
+        
     }
     
   }
-
+  
   return 0;
 }
 
