@@ -1,12 +1,13 @@
 // HARDWARE REQUIREMENTS
 // ==================
 // Example for ESP32 sending OSC midi to TouchOSC -> Virtual Midi -> DAW
-//TODO add Bonjour (mDNS)
+// TODO better calibration, adding a way to fix a CC value, apply filtering
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <WebServer.h>
 #include <EEPROM.h>
@@ -16,7 +17,7 @@
 // default
 bool debugSerial = false;
 const long period = 5; //time between samples in milliseconds
-IPAddress sendIp(192, 168, 0, 169); // <- change me
+IPAddress sendIp(192, 168, 0, 255); // <- default not really use, we are using Bonjour (mDNS) to find IP and PORT of touchoscbridge
 unsigned int sendPort = 12101; // <- touchosc port
 
 #define LED_BUILTIN 19
@@ -30,6 +31,7 @@ float press = 0.00;
 float pressmap = 0.00;
 long startMillis = 0;
 uint16_t *ptr;
+bool touchoscbridgeFound = false;
 
 bool error = 0;
 int statusCode;
@@ -38,9 +40,6 @@ String st;
 String content;
 String esid;
 String epass = "";
-String eudpip;
-IPAddress udpip;
-String eudpport;
 
 
 //Function Decalration
@@ -73,7 +72,7 @@ void setup() {
   WiFi.disconnect();
   EEPROM.begin(512); //Initialasing EEPROM
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH); // turn off only when not connected
+  
 
   /*
     // CLEAR EEPROM to reset wifi credentials
@@ -81,7 +80,8 @@ void setup() {
     for (int i = 0 ; i < EEPROM.length() ; i++) {
     EEPROM.write(i, 0);
     }
-  */
+    */
+  
 
   delay(10);
   pinMode(0, INPUT);
@@ -94,15 +94,6 @@ void setup() {
     epass += char(EEPROM.read(i));
   }
 
-  for (int i = 96; i < 128; ++i)
-  {
-    eudpip += char(EEPROM.read(i));
-  }
-  for (int i = 128; i < 160; ++i)
-  {
-    eudpport += char(EEPROM.read(i));
-  }
-
   if (debugSerial) {
     Serial.println();
     Serial.println("Reading EEPROM");
@@ -110,25 +101,29 @@ void setup() {
     Serial.println(esid);
     Serial.print("PASS: ");
     Serial.println(epass);
-    Serial.print("UDP SERVER IP: ");
-    Serial.println(eudpip);
-    Serial.print("UDP SERVER PORT: ");
-    Serial.println(eudpport);
   }
 
-  udpip.fromString(eudpip);
-  oscUdp.setDestination(udpip, atol(eudpport.c_str()));
-
   WiFi.begin(esid.c_str(), epass.c_str());
+
+  if (!MDNS.begin("blowsuck")) {
+      Serial.println("Error setting up MDNS responder!");
+      while(1){
+          delay(1000);
+      }
+  }
 
 }
 
 void loop() {
 
   if ((WiFi.status() == WL_CONNECTED)) {
-    startMillis = millis();                                           //save the starting time
-    error = readCFSensor(0x6D);              //start conversion and read on pressure sensor ad 0x6D address
-    while ((millis() - startMillis) < period);                        //waits until period done
+    if(!touchoscbridgeFound) {
+      browseService("touchoscbridge", "udp");
+    } else {
+      startMillis = millis();                                           //save the starting time
+      error = readCFSensor(0x6D);              //start conversion and read on pressure sensor ad 0x6D address
+      while ((millis() - startMillis) < period);                        //waits until period done
+    }
   }
 
   if (testWifi() && (digitalRead(0) != 0)) {
@@ -145,11 +140,53 @@ void loop() {
   while ((WiFi.status() != WL_CONNECTED))
   {
     digitalWrite(LED_BUILTIN, LOW);
-    delay(100);
+    delay(250);
+    digitalWrite(LED_BUILTIN, HIGH);
     server.handleClient();
   }
 
 }
+
+void browseService(const char * service, const char * proto){
+    if (debugSerial) {
+      Serial.printf("Browsing for service _%s._%s.local. ... ", service, proto);
+    }
+    int n = MDNS.queryService(service, proto);
+    if (n == 0) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(500);
+      digitalWrite(LED_BUILTIN, LOW);
+      if (debugSerial) {
+        Serial.println("no services found");
+      }
+    } else {
+      
+        if (debugSerial) {
+          Serial.print(n);
+          Serial.println(" service(s) found");
+        }
+        
+        for (int i = 0; i < n; ++i) {
+            oscUdp.setDestination(MDNS.IP(i), MDNS.port(i));
+            if (debugSerial) {
+              // Print details for each service found
+              Serial.print("  ");
+              Serial.print(i + 1);
+              Serial.print(": ");
+              Serial.print(MDNS.hostname(i));
+              Serial.print(" (");
+              Serial.print(MDNS.IP(i));
+              Serial.print(":");
+              Serial.print(MDNS.port(i));
+              Serial.println(")");
+            }
+         }
+         digitalWrite(LED_BUILTIN, HIGH);
+         touchoscbridgeFound = true;
+         
+      }
+}
+
 
 
 // XGZP6897D I2C
@@ -230,9 +267,7 @@ bool readCFSensor(byte sensorAddress) {
     
     if(press <= 0.34) { //weird when going full blast it jumps to 65.54 (from -)
         ccSuck = map(press, -65.53, 0.34, 0, 127);
-        //todo add filter?
-        //ccmap = map(ema_filter(pressmap, ptr), 0, 131.08, 0, 127);
-        //don't send if last value
+
         if (debugSerial) {
           Serial.print(ccSuck);
           Serial.println("suck");
@@ -247,9 +282,7 @@ bool readCFSensor(byte sensorAddress) {
         
     } else if(press >= 0.48) {
         ccBlow = map(press, 0.48, 65.53, 0, 127);
-        //todo add filter?
-        //ccmap = map(ema_filter(pressmap, ptr), 0, 131.08, 0, 127);
-        //don't send if last value
+
         if (debugSerial) {
           Serial.print(ccBlow);
           Serial.println("blow");
@@ -389,7 +422,7 @@ void createWebServer()
       content += "<form action=\"/scan\" method=\"POST\"><input type=\"submit\" value=\"scan\"></form>";
       content += "<p>";
       content += st;
-      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><label>UDP server IP / PORT:</label><input required placeholder='udp server ip' name='udpserverip' length=32><input placeholder='udp server port' name='udpserverport' required value='12101' length=4><br /><br /><input type='submit'></form>";
+      content += "</p><form method='get' action='setting'><label>SSID: </label><input name='ssid' required length=32><input name='pass' type='password' length=64><br /><br /><input type='submit'></form>";
       content += "</html>";
       server.send(200, "text/html", content);
     });
@@ -403,11 +436,9 @@ void createWebServer()
     server.on("/setting", []() {
       String qsid = server.arg("ssid");
       String qpass = server.arg("pass");
-      String qudpserverip = server.arg("udpserverip");
-      String qudpserverport = server.arg("udpserverport");
 
       // SID / PWD
-      if (qsid.length() > 0 && qudpserverip.length() > 0 && qudpserverport.length() > 0) {
+      if (qsid.length() > 0) {
         if (debugSerial) {
           Serial.println("clearing eeprom");
         }
@@ -435,40 +466,6 @@ void createWebServer()
         for (int i = 0; i < qpass.length(); ++i)
         {
           EEPROM.write(32 + i, qpass[i]);
-          if (debugSerial) {
-            Serial.print("Wrote: ");
-            Serial.println(qpass[i]);
-          }
-        }
-
-        // UDP SERVER
-        if (debugSerial) {
-          Serial.println("clearing eeprom");
-        }
-        for (int i = 96; i < 160; ++i) {
-          EEPROM.write(i, 0);
-        }
-        if (debugSerial) {
-          Serial.println(qudpserverip);
-          Serial.println("");
-          Serial.println(qudpserverport);
-          Serial.println("");
-          Serial.println("writing eeprom udp server:");
-        }
-        for (int i = 0; i < qudpserverip.length(); ++i)
-        {
-          EEPROM.write(96 + i, qudpserverip[i]);
-          if (debugSerial) {
-            Serial.print("Wrote: ");
-            Serial.println(qudpserverip[i]);
-          }
-        }
-        if (debugSerial) {
-          Serial.println("writing eeprom udp server port:");
-        }
-        for (int i = 0; i < qudpserverport.length(); ++i)
-        {
-          EEPROM.write(128 + i, qudpserverport[i]);
           if (debugSerial) {
             Serial.print("Wrote: ");
             Serial.println(qpass[i]);
